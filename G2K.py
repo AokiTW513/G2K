@@ -4,6 +4,7 @@ import aubio
 from pynput.keyboard import Controller
 import time
 
+#印出所有的裝置，找到你要的裝置後把前面那個數字放到device_id就可以了，然後channel指你要錄幾個聲道(這個是從1開始算)，target_channels是你要讀取哪個聲道(這個是從0開始算)，後面寫1 in代表只有單聲道
 device_list = sd.query_devices()
 print(device_list)
 
