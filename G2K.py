@@ -3,6 +3,7 @@ import numpy as np
 import aubio
 from pynput.keyboard import Controller
 import time
+import csv 
 
 #印出所有的裝置，找到你要的裝置後把前面那個數字放到device_id就可以了，然後channel指你要錄幾個聲道(這個是從1開始算)，target_channels是你要讀取哪個聲道(這個是從0開始算)，後面寫1 in代表只有單聲道
 device_list = sd.query_devices()
@@ -11,12 +12,7 @@ print(device_list)
 keyboard = Controller()
 Testing = False
 
-normalMode = True
-last_mode_switch_time = 0
-mode_switch_cooldown = 1.0
-switchModKey = ['Switch']
-
-device_id = 3
+device_id = 2
 samplerate = 48000
 blocksize = 1024
 channels = 1
@@ -27,60 +23,20 @@ pitch_o.set_unit("Hz")
 pitch_o.set_silence(-40)
 
 # 設定Hz多少(最小, 最大)會按什麼按鍵，可以設定多個按鍵
-pitch_key_map = {
-    (261, 269): ['a'], #左 第3弦第5格
-    (296, 300): ['d'], #右 第3弦第7格
-    (280, 285): ['k'], #跳 第3弦第6格
-    (351, 356): ['w'], #上 第2弦第6格
-    (372, 379): ['l'], #爬 第2弦第7格
-    (313, 319): ['d', 'j'], #右跳 第3弦第9格
-    (331, 339): ['k', 'd'], #右衝 第3弦第8格
-    (231, 238): ['a', 'k'], #左衝 第3弦第3格
-    (248, 252): ['a', 'j'], #左跳 第3弦第4格
-    (194, 201): ['a', 's', 'j'], #左下衝 第4弦第5格
-    (221, 225): ['d', 's', 'j'], #右下衝 第4弦第7格
-    (496, 501): ['d', 'w', 'j'], #右上衝 第1弦第7格
-    (442, 447): ['a', 'w', 'j'], #左上衝 第1弦第5格
-    (469, 474): ['h'], #對話 第1弦第6格
-    (394, 402): ['q'], #暫停 第2弦第8格 (1/3)
-    (526, 530): ['d', 's', 'j', 'k'], #右hyper 第1弦第8格
-    (418, 421): ['a', 's', 'j', 'k'], #左hyper 第1弦第4格
-    (209, 212): ['w', 'j'], #上衝 第4弦第6格
-    (157, 162): ['s'], #下 第5弦第6格
-    (166, 172): ['s', 'j'], #下衝 第5弦第7格
-    (558, 564): switchModKey, #切換模式 第1弦第9格
-}
+pitch_key_map = {}
 
-pitch_key_map_feather = {
-    (261, 269): ['a'], #左 第3弦第5格
-    (296, 300): ['d'], #右 第3弦第7格
-    (280, 285): ['k'], #跳 第3弦第6格
-    (351, 356): ['w'], #上 第2弦第6格
-    (372, 379): ['l'], #爬 第2弦第7格
-    (313, 319): ['d', 'j'], #右跳 第3弦第9格
-    (331, 339): ['k', 'd'], #右衝 第3弦第8格
-    (231, 238): ['a', 'k'], #左衝 第3弦第3格
-    (248, 252): ['a', 'j'], #左跳 第3弦第4格
-    (194, 201): ['a', 's', 'j'], #左下衝 第4弦第5格
-    (221, 225): ['d', 's', 'j'], #右下衝 第4弦第7格
-    (496, 501): ['d', 'w', 'j'], #右上衝 第1弦第7格
-    (442, 447): ['a', 'w', 'j'], #左上衝 第1弦第5格
-    (469, 474): ['h'], #對話 第1弦第6格
-    (394, 402): ['q'], #暫停 第2弦第8格 (1/3)
-    (526, 530): ['d', 's', 'j', 'k'], #右hyper 第1弦第8格
-    (418, 421): ['a', 's', 'j', 'k'], #左hyper 第1弦第4格
-    (209, 212): ['w', 'j'], #上衝 第4弦第6格
-    (157, 162): ['s'], #下 第5弦第6格
-    (166, 172): ['s', 'j'], #下衝 第5弦第7格
-    (558, 564): switchModKey, #切換模式 第1弦第9格
-}
+reader = csv.DictReader(open('key_bind.csv', 'r', encoding='utf-8'))
+for row in reader:
+    min_pitch = float(row['min_pitch'])
+    max_pitch = float(row['max_pitch'])
+    keys = row['keys'].split('|')
+    pitch_key_map[(min_pitch, max_pitch)] = keys
+
 
 current_keys = set()
 
 def audio_callback(indata, frames, time_, status):
     global current_keys
-    global normalMode
-    global last_mode_switch_time
     if status:
         print(status)
 
@@ -91,31 +47,9 @@ def audio_callback(indata, frames, time_, status):
         print(f"偵測到音高：{pitch:.2f} Hz")
         if not Testing:
             new_keys = set()
-            now = time.time()
-            if normalMode: 
-                for freq_range, keys in pitch_key_map.items():
-                    if freq_range[0] <= pitch <= freq_range[1]:
-                        if keys == switchModKey:
-                            if now - last_mode_switch_time > mode_switch_cooldown:
-                                print("切換至羽毛模式")
-                                normalMode = False
-                                last_mode_switch_time = now
-                            else:
-                                print("切換太快，忽略")
-                        else:    
-                            new_keys.update(keys)  # 加入多個鍵
-            if not normalMode:
-                for freq_range, keys in pitch_key_map_feather.items():
-                    if freq_range[0] <= pitch <= freq_range[1]: 
-                        if keys == switchModKey:
-                            if now - last_mode_switch_time > mode_switch_cooldown:
-                                print("切換至普通模式")
-                                normalMode = False
-                                last_mode_switch_time = now
-                            else:
-                                print("切換太快，忽略")
-                        else:    
-                            new_keys.update(keys)  # 加入多個鍵
+            for freq_range, keys in pitch_key_map.items():
+                if freq_range[0] <= pitch <= freq_range[1]:
+                    new_keys.update(keys)  # 加入多個鍵 
 
             # 找出要放開的鍵
             keys_to_release = current_keys - new_keys
